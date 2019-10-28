@@ -1,0 +1,136 @@
+---
+title: "seminar_2b"
+author: "Yanchao Luo"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: github_document
+---
+
+## R Markdown
+```{r}
+library(tidyverse)
+```
+```{r}
+str(mpg)
+```
+
+## Creating a ggplot
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy))
+```
+Your first (bare-bones) graphing template
+```
+ggplot(data = <DATA>) + 
+  <GEOM_FUNCTION>(mapping = aes(<MAPPINGS>))
+
+```
+map the colors
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy, color = class))
+```
+ map class to the size 
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy, size = class))
+```
+
+make all of the points in our plot blue:
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy), color = "green")
+```
+Second template
+```
+ggplot(data = <DATA>) + 
+  <GEOM_FUNCTION>(
+     mapping = aes(<MAPPINGS>),
+     stat = <STAT>, 
+     position = <POSITION>
+  ) +
+  <COORDINATE_FUNCTION> +
+  <SCALE_FUNCTION> +
+  <AXIS_FUNCTION> +
+  <FACET_FUNCTION>
+```
+add the smooth line
+```{r}
+ggplot(data = mpg, 
+       mapping = aes(x = displ, y = hwy)) +
+  geom_point() +
+  geom_smooth()
+```
+
+
+
+## Bar chart
+
+the average fuel efficiency for each class
+```{r}
+(averageEfficiency <- 
+  mpg %>% group_by(class) %>% summarise(fuel_efficiency = mean(hwy)))
+```
+```{r}
+ggplot(averageEfficiency) + 
+  geom_bar(aes(x = class, y = fuel_efficiency),stat = "identity")
+```
+add some color to our bar chart
+```{r}
+ggplot(averageEfficiency) + 
+  geom_bar(aes(x = class, y = fuel_efficiency, fill = class),
+           stat = "identity")
+```
+add axis
+```{r}
+ggplot(averageEfficiency) + 
+  geom_bar(aes(x = class, y = fuel_efficiency, fill = class),
+           stat = "identity") +
+  ylab("Fuel Efficiency (miles per gallon)") +
+  xlab("Vehicle Type")
+```
+ reverse the y-scale
+```{r}
+ggplot(averageEfficiency) + 
+  geom_bar(aes(x = class, y = fuel_efficiency, fill = class),
+           stat = "identity") +
+  ylab("Fuel Efficiency (miles per gallon)") +
+  xlab("Vehicle Type") +
+  scale_y_reverse()
+```
+use `coord_flip`
+```{r}
+ggplot(averageEfficiency) + 
+  geom_bar(aes(x = class, y = fuel_efficiency, fill = class),
+           stat = "identity") +
+  coord_flip()
+```
+coord_polar
+```{r}
+ggplot(averageEfficiency) + 
+  geom_bar(aes(x = class, y = fuel_efficiency, fill = class),
+           stat = "identity") +
+  coord_polar()
+```
+<FACET_FUNCTION>
+```{r}
+ggplot(data = mpg, 
+       mapping = aes(x = displ, y = hwy)) +
+  geom_point()
+```
+
+`facet_wrap()`
+```{r}
+ggplot(data = mpg, 
+       mapping = aes(x = displ, y = hwy, color= class)) +
+  geom_point() +
+  facet_wrap(~class)
+```
+
+**Challenge**:
+
+```{r}
+ggplot(data = mpg, 
+       mapping = aes(x = displ, y = hwy, size=class, color= drv)) +
+  geom_point()
+```
+

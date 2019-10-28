@@ -1,0 +1,201 @@
+---
+title: "Seminar 3"
+author: "Yanchao Luo"
+output: github_document
+---
+
+# Part 1 - Accessing data using GEOquery
+
+Load the library
+```{r,echo=FALSE}
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("GEOquery")
+#biocLite("biomaRt")
+suppressPackageStartupMessages(library(GEOquery))
+suppressPackageStartupMessages(library(biomaRt))
+#install.packages("tidyverse")
+suppressPackageStartupMessages(library(tidyverse))
+#install.packages("data.table")
+suppressPackageStartupMessages(library(data.table))
+#install.packages("reshape2")
+suppressPackageStartupMessages(library(reshape2))
+```
+
+Download the data
+```{r,echo=FALSE}
+gds <- getGEO("GDS507")
+
+#we can use str() to peak at the structure of a data object. 
+str(gds)
+```
+
+Extract a meta data table
+```{r}
+meta_data <- data.frame(Sample = gds@dataTable@columns$sample, disease = gds@dataTable@columns$disease.state)
+#we grab this info from the appropriate slots above. 
+gds_data <- gds@dataTable@table
+```
+
+# Part 2 - Exploring a gene expression dataset
+```{r}
+head(gds_data)
+```
+```{r}
+nrow(gds_data)
+ncol(gds_data)
+```
+ 
+ `apply()` in base R.
+```{r}
+#We exclude the first and second columns because they hold the probe and gene names, respectively. 
+apply(gds_data[,-c(1, 2)], 2, median)
+```
+
+```{r}
+melted_data <- melt(gds_data, id.vars = c("ID_REF", "IDENTIFIER"), var = "Sample")
+
+head(melted_data)
+```
+
+Calculate the mean gene expression per sample.
+```{r}
+melted_data %>% 
+    group_by(Sample) %>% 
+    summarize(mean = mean(value))
+```
+```{r}
+(new_melted_data <- melted_data %>% 
+    group_by(Sample, IDENTIFIER) %>% 
+    summarize(Count = mean(value)))
+```
+```{r}
+#open connection between biomaRt and R. 
+human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+#function that takes in data frame, and outputs same data frame with associated chromosome annotations.
+identify_gene_names <- function(df){
+    names(df) <- c("Sample", "hgnc_symbol", "Count")
+    names <- getBM( attributes=c("hgnc_symbol", "chromosome_name") , filters= "hgnc_symbol", values = unique(df$hgnc_symbol), mart = human)
+    left_join(df, names, by = "hgnc_symbol")
+}
+
+#There's a lot of variation in how the chromosomal location is annotated. To simplify things, let's filter out all genes with annotations that are not numeric numbers between 1 and 23, X or Y. 
+data_with_chromosome <- identify_gene_names(new_melted_data) %>% 
+    filter(chromosome_name %in% c(1:23, "X", "Y"))
+```
+
+## **Part 2 Exercise**
+
+Let's say we're interested in how the average expression of genes on the X chromosome changes between RCC and normal cells.
+
+The first thing we will do is combine information from the meta data file (meta_data) with our expression table (data_with_chromosome). Then we will use dplyr verbs to first group all samples by disease status, filter out all non-X-chromosome genes, and then calcualte the mean using `summarize()`.
+```{r}
+full_data <- left_join(data_with_chromosome, meta_data, by = "Sample")
+full_data %>% 
+    group_by(disease) %>% 
+    filter(chromosome_name == "X") %>% 
+    summarize(mean = mean(Count))
+
+```
+
+# Part 3 Graphing expression data
+
+let's choose a random sampling of 100.
+```{r}
+#choose random number between 1 and however many genes we have. 
+set.seed(5747540)
+sample_to_choose <- sample(1:length(unique(full_data$hgnc_symbol)), size = 100)
+#choose genes that correspond to those numbers in a list of genes. 
+names_to_choose <- as.character(unique(full_data$hgnc_symbol)[sample_to_choose])
+
+full_data %>% 
+    filter(hgnc_symbol %in% names_to_choose) %>% 
+    group_by(Sample) %>% 
+    ggplot(aes(x = as.factor(chromosome_name), y = Count)) + geom_point()
+```
+
+## Part 3 Exercise
+
+*By adding one additional function to the code above, calculate the sum of all counts in each sample and divide each expression value by that sum (hint: use mutate). Remember, you can add multiple new columns using mutate by separating each column with a comma (i.e mutate(x = c("a", "b"), y = c("d", "c"))). Plot this new transformed column.*
+
+
+```{r}
+full_data %>% 
+    filter(hgnc_symbol %in% names_to_choose) %>% 
+    group_by(Sample) %>% 
+  mutate(Sum_value=sum(Count),Percent_value=Count/Sum_value) %>% 
+    ggplot(aes(x = as.factor(chromosome_name), y = Percent_value)) + geom_point()
+```
+
+# Part 4 Analyzing the results of statistical tests
+
+Being able to graph these results is useful, but what we really want to do is run statistical tests on the data. There are a variety of ways to do that which will be explored in subsequent lectures. But in this seminar we will focus on doing this using dplyr.
+
+In this case, we want to identify the genes that are differentially expressed between the normal and RCC samples. We will use summarize() to perform a t-test for each gene.
+```{r}
+full_data %>% 
+    group_by(hgnc_symbol) %>% 
+    summarize( pvalue = t.test(Count ~ disease)$p.value)
+```
+
+## Part 4 Exercise
+
+*Make a density plot using geom_density() graph of the p-value distributions of the above t-test. It should look like this:*
+```{r}
+full_data %>% 
+    group_by(hgnc_symbol) %>% 
+    summarize( pvalue = t.test(Count ~ disease)$p.value) %>% 
+  ggplot(aes(x = pvalue)) + geom_density()
+```
+
+*Modify the above code to also identify the length of each gene captured in the dataset we have been working with in the above exercises. This can be done by adding "transcript_length" as attribute in getBM function. You should end up with an extra column for "transcript length". We will use this number later.*
+```{r}
+human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+#function that takes in data frame, and outputs same data frame with associated chromosome annotations.
+identify_gene_names <- function(df){
+    names(df) <- c("Sample", "hgnc_symbol", "Count")
+    names <- getBM( attributes=c("hgnc_symbol", "chromosome_name","transcript_length") , filters= "hgnc_symbol", values = unique(df$hgnc_symbol), mart = human)
+    left_join(df, names, by = "hgnc_symbol")
+}
+
+#There's a lot of variation in how the chromosomal location is annotated. To simplify things, let's filter out all genes with annotations that are not numeric numbers between 1 and 23, X or Y. 
+data_with_chromosome2 <- identify_gene_names(new_melted_data) %>% 
+    filter(chromosome_name %in% c(1:23, "X", "Y"))
+head(data_with_chromosome2)
+```
+
+```{r}
+
+## with transcript_length
+full_data2<- left_join(data_with_chromosome2, meta_data, by = "Sample")
+```
+
+*Note that if you acquired transcript lengths, you should NOT be using that data frame for this task. Can you see why?*
+
+```{r}
+##Use "A1BG" as example
+nrow(full_data %>% 
+    filter(hgnc_symbol=="A1BG") )
+```
+
+```{r}
+nrow(full_data2 %>% 
+    filter(hgnc_symbol=="A1BG") )
+```
+We should not use the data which includes the transcript lengths because each sample have many different transcript lengths with the same count. The p-value will decrease dramatically when we use this dataset.
+
+*Also, extract a data frame of all genes with p-values lower than 0.05. Finally, extract the name of the gene with the lowest p-value.*
+```{r}
+#Create a data frame with p values less than 0.05
+data_pvalue<-full_data %>% 
+    group_by(hgnc_symbol) %>% 
+    summarize( pvalue = t.test(Count ~ disease)$p.value) %>% filter(pvalue < 0.05)
+
+#Get name of gene with lowest pvalue
+lowest_pvalue <- min(data_pvalue$pvalue)
+lowest_pvalue
+gene_name <- filter(data_pvalue, pvalue == lowest_pvalue) %>% 
+select(hgnc_symbol)
+gene_name
+```
+The name of gene with the lowest p-value is CLDN2 and p-value is 5.911385e-09.
+ 
