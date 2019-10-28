@@ -1,0 +1,153 @@
+---
+title: "Geneset Enrichment Analysis"
+author: "Virginia Pichler"
+date: "March 30, 2019"
+output: github_document
+---
+
+#### Input metadata and expression data cleaned in the [preprocessing data](../preprocessing/Pre_processing.rmd).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(reshape2)
+library(devtools)
+library(ermineR)
+library(limma)
+library(knitr)
+library(ggplot2)
+library(GEOquery)
+library(readr)
+```
+### Load and format data
+```{r}
+#load in feature data
+geo_GSE25507 <- getGEO("GSE25507", GSEMatrix = TRUE)
+new_geo_GSE25507<- geo_GSE25507[[1]]
+
+# pull gene symbol from feature data
+symbol<-fData(new_geo_GSE25507)
+symbol<-symbol[, c("ID", "Gene Symbol")]
+symbol<-symbol%>%arrange(ID)
+
+
+# load in expression data and metadata
+
+Meta_data<-readRDS('Meta_data.rds')
+combine_norm<-readRDS('combine_norm.rds')
+
+# add column for sample id in metadata
+Meta_data$sample_id <- rownames(Meta_data)
+
+# move sample id column to first position in metadata
+Meta_data <- Meta_data %>% select(sample_id, everything())
+rownames(Meta_data) <- c()
+```
+### Create linear model
+```{r}
+# check equivalence of samples in metadata and expression data
+Meta_data$sample_id==names(combine_norm)
+
+#design matrix
+Meta_data_design <-Meta_data[,c("sample_id", "diagnosis" )]
+designMatrix <- model.matrix(~diagnosis, Meta_data_design)
+
+
+# lmfit 
+lmfit <- lmFit(combine_norm, designMatrix)
+
+# run ebayes to calculate moderated t-statistics, F-statistic, log-odds
+lmfit_ebayes <- eBayes(lmfit)
+```
+### Select, format and annotate genes for enrichment analysis
+```{r}
+# select all genes and reformat and arrange data frame
+allGenes <- topTable(lmfit_ebayes, number = Inf)
+allGenes$ID <- rownames(allGenes)
+allGenes<-allGenes%>%arrange(ID)
+
+# annotate with gene symbols
+allGenes<-full_join(allGenes, symbol, by = "ID")
+colnames(allGenes)[8] <- "gene"
+allGenes<-unique(allGenes)
+allGenes<-na.omit(allGenes)
+
+# subset data frame to gene and logFC values.
+subsettedallGenes<-allGenes[, c("gene", "logFC")]
+subsettedallGenes<-unique(subsettedallGenes)
+
+```
+### Geneset Enrichment Analysis
+
+```{r, warning=FALSE}
+# retrieve gene multifunctionality scores
+urlfile<-'https://raw.githubusercontent.com/STAT540-UBC/STAT540-UBC.github.io/master/seminars/seminars_winter_2019/seminar10/data/gene_multifunctionality_scores.csv'
+
+gene_multifunctionality_scores<-read.csv(urlfile)
+
+
+# check if gene list has multifunctional bias
+mergedData <- subsettedallGenes %>% inner_join(gene_multifunctionality_scores, by = "gene")
+
+rankMfCor <- cor(abs(mergedData$logFC), mergedData$MF.score, method = "spearman")
+```
+```{r}
+# plot Spearman's correlation 
+mergedData %>%
+  ggplot(aes(x = abs(logFC), y = log10(MF.score))) + 
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle(paste0("r = ", rankMfCor))
+```
+
+```{r}
+### geneset enrichment analysis
+
+#retrieve GO.xml file from ermineR
+if (!file.exists("GO.xml")) { goToday("GO.xml") }
+
+
+# convert scores to absolute values
+ermineInputGeneScores <- subsettedallGenes %>% 
+  mutate(absolute_logFC = abs(logFC)) %>% 
+  select(gene, absolute_logFC) %>% 
+  na.omit() %>% 
+  as.data.frame() %>% 
+  arrange(desc(absolute_logFC))
+
+rownames(ermineInputGeneScores) <- make.names(subsettedallGenes[,1], unique = TRUE)
+
+# enrichment with Precision-Recall method
+enrichmentResult <- precRecall(scores = ermineInputGeneScores, 
+                               scoreColumn = 2, # scores 
+                               bigIsBetter = TRUE, # rank large logFC higher
+                               annotation = "Generic_human", # ermineR Generic_human annotation file
+                               aspects = "B", # biological processes 
+                               iterations = 10000, # 10K sampling iterations so results are stable
+                               geneSetDescription = "GO.xml") # GO XML file
+
+
+# arrange results by MFP value
+enrichmentResult$results %>% arrange(MFPvalue)
+```
+
+```{r}
+# scatterplot of multifunctionality adjustment to GO terms
+enrichmentResult$results %>% 
+  ggplot(aes(x = -log10(Pval), y = -log10(MFPvalue))) +
+  geom_point(alpha = 0.2)
+```
+
+```{r}
+
+# top ten GO terms with largest adjustments 
+enrichmentResult$results %>% 
+  select(Name, ID, Pval, MFPvalue) %>% 
+  mutate(neg_log_pvalue = -log10(Pval),
+         neg_log_mfpvalue = -log10(MFPvalue)) %>% 
+  mutate(log_pvalue_change = neg_log_mfpvalue - neg_log_pvalue) %>% 
+  arrange(desc(abs(log_pvalue_change))) %>% 
+  head(10) %>% 
+  kable()
+```
+

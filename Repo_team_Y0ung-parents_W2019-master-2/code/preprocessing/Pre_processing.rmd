@@ -1,0 +1,196 @@
+---
+title: "Pre processing"
+author: "Yanchao"
+date: '2019-03-25'
+output: github_document
+---
+## Load the library
+```{r,warning=FALSE}
+library(RColorBrewer)
+library(cluster)
+library(pvclust)
+library(xtable)
+library(limma)
+library(plyr)
+library(lattice)
+library(RCurl)
+options(download.file.method = "curl")
+library(GEOquery)
+library(knitr)
+library(pheatmap)
+  library(stringr)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(tidyverse)
+library(mice)
+library(VIM)
+```
+
+## Load the data
+
+### geo_GSE18123 data
+```{r,warning=FALSE}
+ geo_GSE18123 <- getGEO("GSE18123", GSEMatrix = TRUE)
+geo_GSE18123<- geo_GSE18123[[1]]
+```
+
+### Get expression data of geo_GSE18123
+```{r}
+#Get expression data  
+data_GSE18123<-exprs(geo_GSE18123)
+hist(data_GSE18123, col = "gray", main = "GSE70213 - Histogram")
+
+```
+
+It appears a lot of genes have values << 500000. 
+We consider taking Log2 transformation.
+
+```{r}
+hist(log2(data_GSE18123 + 1), col = "gray", main = "GSE70213 log transformed - Histogram")
+log_data_GSE18123<-log2(data_GSE18123 + 1)
+log_data_GSE18123<-as.data.frame(log_data_GSE18123)
+```
+
+### get melta data of GSE18123
+```{r}
+## get melta data of GSE18123
+prDes_GSE18123 <- pData(geo_GSE18123)[,c("organism_ch1","title",colnames(pData(geo_GSE18123))[grep("characteristics", colnames(pData(geo_GSE18123)))])]
+meta_data_GSE18123<-prDes_GSE18123[,1:5]
+colnames(meta_data_GSE18123) = c("organism","sample_name","diagnosis","gender","age")
+meta_data_GSE18123$diagnosis = as.factor(gsub("diagnosis: ","", meta_data_GSE18123$diagnosis))
+
+meta_data_GSE18123$age = gsub("age: ","", meta_data_GSE18123$age)
+
+meta_data_GSE18123$age<-as.integer(str_extract(meta_data_GSE18123$age, "[0-9]{2,3}"))
+meta_data_GSE18123$diagnosis
+meta_data_GSE18123$age <- meta_data_GSE18123$age/12
+
+meta_data_GSE18123$diagnosis<-ifelse(meta_data_GSE18123$diagnosis == "PDD-NOS", "AUTISM", ifelse(meta_data_GSE18123$diagnosis == "ASPERGER'S DISORDER", "AUTISM",  ifelse(meta_data_GSE18123$diagnosis == "CONTROL", "CONTROL", ifelse(meta_data_GSE18123$diagnosis == "AUTISM", "AUTISM", "error"))))
+meta_data_GSE18123$batch<-"none"
+
+kable(head(meta_data_GSE18123))
+
+```
+
+```{r}
+dim(meta_data_GSE18123)
+```
+
+### geo_GSE25507 data
+```{r,warning=FALSE}
+# 
+geo_GSE25507 <- getGEO("GSE25507", GSEMatrix = TRUE)
+geo_GSE25507<- geo_GSE25507[[1]]
+```
+
+### Get expression data of GSE25507
+```{r}
+#Get expression data of GSE25507 
+data_GSE25507<-exprs(geo_GSE25507)
+hist(data_GSE25507, col = "gray", main = "GSE25507 - Histogram")
+```
+
+It appears a lot of genes have values < 1000. 
+```{r}
+hist(log2(data_GSE25507 + 1), col = "gray", main = "GSE25507 log transformed - Histogram")
+log_data_GSE25507<-log2(data_GSE25507 + 1)
+log_data_GSE25507<-as.data.frame(log_data_GSE25507)
+```
+
+### get meta data of GSE25507
+```{r}
+# get meta data of GSE25507
+prDes_GSE25507 <- pData(geo_GSE25507)[,c("organism_ch1","title",colnames(pData(geo_GSE18123))[grep("characteristics", colnames(pData(geo_GSE25507)))])]
+meta_data_GSE25507<-prDes_GSE25507[,1:5]
+colnames(meta_data_GSE25507) = c("organism","sample_name","batch","diagnosis","age")
+meta_data_GSE25507$diagnosis = as.factor(gsub("diagnosis: ","", meta_data_GSE25507$diagnosis))
+
+meta_data_GSE25507$age = gsub("age: ","", meta_data_GSE25507$age)
+
+meta_data_GSE25507$age<-as.integer(str_extract(meta_data_GSE25507$age, "[0-9]{1}"))
+meta_data_GSE25507$diagnosis<-ifelse(meta_data_GSE25507$diagnosis == "group: control", "CONTROL", ifelse(meta_data_GSE25507$diagnosis == "group: autism", "AUTISM", "error"))
+meta_data_GSE25507$batch<-ifelse(meta_data_GSE25507$batch == "scan batch: Batch 1", "batch 1", ifelse(meta_data_GSE25507$batch == "scan batch: Batch 2", "batch 2", "error"))
+kable(head(meta_data_GSE25507))
+```
+
+```{r}
+dim(meta_data_GSE25507)
+
+```
+
+## Imputing the missing data by multiple imputation
+```{r}
+## identify how many NA in the data
+sum(is.na(meta_data_GSE25507$age))
+```
+
+```{r}
+set.seed(2019)
+imputed_Data <- mice(meta_data_GSE25507, m=5, maxit = 50, method = 'pmm', seed = 500)
+## We use the third iteration:
+meta_data_GSE25507_2 <- complete(imputed_Data, 3)
+rownames(meta_data_GSE25507_2) <- rownames(meta_data_GSE25507)
+```
+
+
+### Combine two meta data
+```{r}
+F_meta_data_GSE18123<-meta_data_GSE18123 %>% dplyr::select(organism,sample_name,diagnosis,age, batch)
+F_meta_data_GSE25507<-meta_data_GSE25507_2 %>% dplyr::select(organism,sample_name,diagnosis,age, batch)
+## Combine two meta data
+Meta_data = rbind(F_meta_data_GSE18123, F_meta_data_GSE25507)
+```
+
+## density plot
+```{r}
+# density plot
+
+dat.geneMeans <- c(rowMeans(log_data_GSE25507), rowMeans(log_data_GSE18123)) 
+plotDat <- data.frame(mean_gene = dat.geneMeans,
+                      Dataset = rep(c('log_data_GSE25507', 'log_data_GSE18123'), each = nrow(log_data_GSE25507)))
+
+(probeAvg <- ggplot(data = plotDat, aes(x = mean_gene, col = Dataset)) +
+   geom_density() + 
+   ggtitle("Average gene expression value density of two experiments") + 
+   xlab("mean of gene ") + 
+   ylab("Density") + 
+   theme_bw()
+)
+
+
+```
+
+## Quantile normalization
+```{r}
+# combine data from two experiments into one matrix, each column represents gene expression values of one sample
+combine_matrix <- as.matrix(cbind(log_data_GSE18123,log_data_GSE25507))
+str(combine_matrix, max.level = 0)
+```
+```{r}
+# quantile normalization
+system.time(combine_norm <- normalizeBetweenArrays(combine_matrix))
+```
+```{r}
+dat.geneMeans <- c(rowMeans(combine_norm[, 1:ncol(log_data_GSE18123)]), rowMeans(combine_norm[, ncol(log_data_GSE18123):ncol(combine_norm)])) 
+plotDat2 <- data.frame(mean_gene = dat.geneMeans,
+                      Dataset = rep(c('log_data_GSE25507', 'log_data_GSE18123'), each = nrow(log_data_GSE25507)))
+
+(probeAvg <- ggplot(data = plotDat2, aes(x = mean_gene, col = Dataset)) +
+   geom_density() + 
+   ggtitle("Average gene expression value density of two experiments") + 
+   xlab("mean of gene ") + 
+   ylab("Density") + 
+   theme_bw()
+)
+
+```
+
+## Save the data to avoid future re-downloading
+```{r}
+Meta_data$diagnosis<- Meta_data$diagnosis %>% factor(levels = c("AUTISM", "CONTROL"))
+Meta_data$batch<- Meta_data$batch %>% factor(levels = c("none", "batch 1","batch 2"))
+#Saving normalized data seperately
+saveRDS(combine_norm, file = "combine_norm.rds")
+saveRDS(Meta_data, file = "Meta_data.rds")
+```

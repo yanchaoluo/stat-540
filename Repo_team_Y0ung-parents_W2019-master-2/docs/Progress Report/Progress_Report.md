@@ -1,0 +1,137 @@
+Progess Report
+================
+Virginia Pichler
+March 13, 2019
+
+
+### What has changed based on the final proposal?
+
+#### *Did your dataset change? If so, why? Have you decided to do a different analysis than what was mentioned in your proposal? If so, Why?*
+Our datasets and analysis methods have mostly remained the same as detailed in the project proposal. The second dataset was subdivided into two seperate datasets, which were generated using different sequencing platforms in the study. No rubric was provided to successfully merge these datasets by IDs. For this reason, we selected the first of the two datasets (GSE25507), which uses the same ID references as our first dataset (GSE18123).  As an additional analysis, we will run cluster analysis and PCA on the combined datasets(all data from GSE18123 and first part of data from GSE25507), as well as the subsetted highest ranked genes from the application of machine learning (Python Logistic Regression).  
+
+#### Task assignments
+
+The tasks of each member will remain the same. Yanchao will clean and merge the datasets, test our hypothesis evaluating variables concerning age and batch in autistic individuals and controls and plot the results. Benson will focus on interpreting these results based on relevant and comparable data, comparing the statiscal methods used and variables impacting gene expression levels in autism. Anthony will apply a machine learning tool to extract highest-ranked genes associated with autism as a predictive model. Virginia will conduct a literature review for the basis of motivation in analysing global gene expression in individuals with autism, particularly focusing on associations with the variables. She will also review the methodologies used to generate the datasets as valid standards in the field of research. Lastly, she will be responsible for project planning and Github repo organisation.    
+
+
+### What is the progress of the analyses?
+
+#### *Since your initial proposal, you should have decided more concretely on what methods to use for each step of your analyses, and employed some of those methods. Briefly and concisely explain your methodology and progress for the aims you have investigated so far. Which parts were modified and which parts remained the same?*
+
+#### The following are steps that have already been completed for the statistical analysis.     
+
+
+**Clean the data:**
+
+We kept all the initial information from two datasets. Then we converted age to a categorical variable which has three values: larger or equal to 5-year-old, smaller than 5-year-old, and no information. The two pre-processed GEO datasets were merged after filtering the data. The combined data and merged metadata could be found in the initial analysis RMD file.
+
+**Normalization:**
+
+We first took log2 transformation for both datasets. Since the scales of the two datasets are different, we decided that quantile normalization was appropriate for our data after considering a few normalization methods.
+
+**Data exploration:**
+
+We performed some graphs (histogram and density plot) to see the distribution of the merged data. We also assigned some values for missing data and made sure there is no missing value in the combined dataset. 
+
+**Principal Component Analysis (PCA):**
+
+PCA was conducted on gene expression to identify the variability explained by factors available in the combined dataset. The first three principal components capture around 60% of the variability in our data. We also plotted the PC1 vs. PC2 for age, batch, and diagnosis separately. The results of these plots show that age, batch, and diagnosis are all not related to PC1 and PC2. 
+
+**Hierarchical Clustering:**
+
+The clustering method we applied was Average method, and our distance metric was “Euclidean”. We still want to find a way to validate our clustering result. 
+
+**Linear regression:**
+
+Linear regression was performed by using the “limma” package in R to identify the top differentially gene expression between control and autism cases. We identified 40 different genes, given a p-value cutoff of 0.1. Then we plotted the top 10 genes and used Hierarchical Clustering algorithms to cluster the top 40 genes that showed differential expression between control and autism cases.    
+
+#### The following are steps that have already been completed for the machine learning.
+
+**Datasets**
+
+All analyses were performed on each dataset individually. Training was done on 70% of the samples. Since the second dataset itself contains a training and a test set, those were combined before 70% was used for training.
+
+**Procedure**
+
+The expression data was extracted from the series matrix txt files. Lowly expressed genes (expression value under 150 in at least one sample) were eliminated from the dataset. The data was centered and normalized, and the rows shuffled. Different models were then trained using the data, the idea being to use a L1-penalty to let the model select "relevant" features, and to compare the selected genes across the different models, datasets and types of analyses (compare with results from statistic analysis).
+
+**SGDClassifier (Stochastic Gradient Descent)**
+
+Cross-validation to find optimal C.
+Hinge loss, elastic net penalty (mixture of L1 and L2), L1-ratio 0.3, maximum of 100 iterations
+LogisticRegression
+Cross-validation to find optimal C.
+L1-penalty
+RandomForestClassifier
+100 random trees with a maximal depth of 20     
+
+
+
+#### The following steps are still in progress for the statistical analysis.
+
+
+#### *What R packages or other tools are you using for your analyses?*
+
+Specific packages required by our project are: cluster, pvclust, xtable, limma, GEOquery, knitr, pheatmap, stringr, ggplot2,reshape2, tidyverse.    
+
+
+[Initial statistical analysis](https://github.com/STAT540-UBC/Repo_team_Y0ung-parents_W2019/blob/master/Progress%20Report/Initial_analysis.md)    
+
+
+
+#### The following steps are still in progress for the machine learning.
+
+- Train model on merged datasets
+- Implement a pipeline that first selects "relevant" genes without removing lowly expressed genes and then fits a second model on top of it (e.g. random forest classifier that does not perform feature selection on its own).
+- Compare the selected genes across models and datasets (e.g. use one dataset to train and the other dataset to validate the model's accuracy).
+- Compare the genes selected by the models to the statistically relevant genes.
+Add age and batch number as features
+- Try different ML model
+
+#### *What R packages or other tools are you using for your analyses?*
+
+Specific packages required for the machine learning are: Python, NumPy, scikit-learn.    
+
+
+### References
+
+[cluster](https://cran.r-project.org/web/packages/cluster/cluster.pdf)   
+[pvclust](https://cran.r-project.org/web/packages/pvclust/pvclust.pdf)   
+[xtable](https://cran.r-project.org/web/packages/xtable/xtable.pdf)   
+[limma](https://www.bioconductor.org/packages/devel/bioc/vignettes/limma/inst/doc/usersguide.pdf)   
+[GEOquery](https://github.com/seandavi/GEOquery)   
+[knitr](https://cran.r-project.org/web/packages/knitr/knitr.pdf)   
+[pheatmap](https://cran.r-project.org/web/packages/pheatmap/pheatmap.pdf)   
+[stringr](https://cran.r-project.org/web/packages/stringr/stringr.pdf)     
+[ggplot2](https://cran.r-project.org/web/packages/ggplot2/ggplot2.pdf)   
+[reshape2](https://cran.r-project.org/web/packages/reshape2/reshape2.pdf)   
+[tidyverse](https://cran.r-project.org/web/packages/tidyverse/index.html)   
+[Python](https://www.python.org/)    
+[NumPy](http://www.numpy.org/)    
+[scikit-learn](https://scikit-learn.org/stable/index.html)       
+
+
+### Results
+
+#### *What are your primary results? Were you able to answer your hypothesis? Did you have any positive results? If no, postulate a discussion as to why that may be. Provide plots and/or tables to present your results. - List some challenges that you encountered? How will you address them?*    
+
+
+**Statistical Analysis**
+
+We identified 40 different genes between control and autism cases (p-value cutoff = 0.01) by using the multiple linear regression. One of our hypotheses was that different gene expression would be detectable in comparing control and autism cases, concerning age and batch. Additionally, our PCA results show that age, diagnosis (control and autism) and batch are all not related to first two of the variability we are observing in our data. This was a first pass analysis of the data, and we will next focus on the age variable, categorically (<5 years, ≥ 5 years, and no age). An additional hypothesis to test will be that age is correlated with autism using logistical regression. Then, we also apply some machine learning methods for this hypothesis.
+
+Preliminary results and figures could be found in the above intial analysis report.
+
+**Machine Learning**
+
+82.1% classification accuracy using 82 genes (SGDClassifier).
+
+96.6% classification accuracy using 40 genes (LogisticRegression). This result needs investigation as it is suspiciously good.
+
+90.0% classification accuracy using 3949 genes (RandomForestClassifier). We need to train this model using already selected features.   
+
+
+#### Challenges
+ 
+ We initially intended to use the complete datasets in both studies selected for this analysis, however, we encountered an issue in the gene identifiers. Dataset 1 and half of Dataset 2 use the same ID coding, whereas the second half of Dataset 2, uses a different scheme due to sequencing on a different platform. As such, we will only be using the data where IDs match. This also has implications in the machine learning, as more work has to be done to map the gene identifiers of both sets to one another. Additionally, the sheer size of the data leads to non-trivial training times. Lastly, PCA did not reveal a batch effect, which may reflect a lack of sensitivity in this test and require an alternative approach, such as *find*BATCH, part of the *explo*BATCH R package. 
+ 
